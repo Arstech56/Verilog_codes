@@ -1,0 +1,135 @@
+
+       //Include.sv:
+//Macros of Memory in this submodule::
+
+`define location_size 8
+`define locations 8
+
+
+      //Interface.sv
+
+//Sub-module including Macros of Memory:
+
+
+`include "include.sv"
+
+//Interfac module:
+
+interface memory_if(input logic clk);
+  logic reset;
+  logic op_cntrl;
+  logic [$clog2(`locations)-1:0] Add_reg;
+  logic [`location_size-1:0] DataIn;
+  logic [`location_size-1:0] DataOut;
+  
+  
+  //Modport with the perspective of Design block
+  modport DUT (input clk, reset, op_cntrl, Add_reg, DataIn, output DataOut);
+  
+  //Modports with the perspective of Testbench:
+  modport TB (output reset, op_cntrl, clk, Add_reg, DataIn, input DataOut);
+  
+  
+endinterface
+
+
+
+
+     //Design.sv
+
+//Main Design module including Interface.sv
+
+`include "interface.sv"
+module memory(memory_if inst);
+  
+  //Byte Addressable memory register:
+ reg [`location_size-1:0]mem_reg[`locations-1:0];
+   
+  //Instantiation using Interface modports:
+  
+  //.inst.DUT.PORTNAME:
+  
+  always @(negedge inst.DUT.clk)begin
+    if (inst.DUT.reset)          //Clear the Memory
+      
+      begin
+        inst.DUT.DataOut<=0;
+        for(int i=0; i<`locations; i++)
+          mem_reg[i]<=0;
+      end
+    else begin
+      if(inst.DUT.op_cntrl)begin 
+        //Write Operation:
+        mem_reg[inst.DUT.Add_reg]<= inst.DUT.DataIn;
+      end
+      
+      else begin
+        
+        //Read Opearion:
+        inst.DUT.DataOut<= mem_reg[inst.DUT.Add_reg];
+      end
+      
+    end
+  end
+endmodule
+
+        //Testbench
+
+
+//Testbench Module: Using Modports, Interface 
+
+//Using TASKS and FUNCTIONS::
+module tb_top();
+  
+  bit clk;
+  always #5 clk=~clk;
+  //Interface Object:
+  memory_if inst(clk); 
+  //Instantiate the TB: Pass modport TB of memory_if:
+  memory dut0(inst); 
+  //Declaration of "reset" function:
+  function op_rst;
+    input clear;
+    begin
+      
+      op_rst=clear;
+    end
+  endfunction
+  //Declaration of "Write" task:
+  task Write;
+    repeat (20) @ (posedge clk) begin
+      inst.TB.op_cntrl= 1;
+      inst.TB.Add_reg= $random;
+      inst.TB.DataIn =  $random;
+    end
+  endtask
+  
+  //Declaration of "Read" Task:
+  task Read;
+    repeat (20)@ (posedge clk) begin
+      inst.TB.op_cntrl=  0;
+      inst.TB.Add_reg=   $random;
+      inst.TB.DataIn=  $random;
+      
+    end
+  endtask
+  
+  //Calling Tasks and Function:"reset", "Write", "Read":
+  initial
+    begin
+      inst.TB.reset= op_rst(1);
+      #10
+      inst.TB.reset= op_rst(0);
+      Write();
+      
+      Read();
+    end
+  
+  initial 
+    begin
+      $dumpfile("dump.vcd");
+      $dumpvars();
+      #400
+      $finish();
+    end
+endmodule

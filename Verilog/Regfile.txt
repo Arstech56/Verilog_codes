@@ -1,0 +1,225 @@
+    //Include.sv
+
+//Regfile Macroes
+`define location_sizes 32
+`define location 32
+
+//ALU Macroes
+`define inp_bits 32
+`define op_bits 2
+`define out_bits 32
+
+
+    //ALU.sv
+
+// ALU Design
+
+//Parametarization For ALU module 
+//parameter inp_bits=32;            //For inputs
+//parameter out_bits=64;            //For Outputs
+//parameter op_bits=2;              //for operations
+
+`include "include.sv"
+
+module alu(
+  input                 [`inp_bits-1:0]inp1,
+  input                 [`inp_bits-1:0]inp2,
+  input               [`op_bits-1:0] alu_op,
+  output reg            [`out_bits-1:0] out);
+  
+  always @(*)begin
+    case(alu_op)
+      
+      2'b00: out= inp1+inp2;  //Addition
+      2'b01: out= inp1-inp2;  //Subtraction
+      2'b10: out= inp1*inp2;  //Multiplication
+      2'b11: out= inp1/inp2;  //Division
+      
+      default: out=0;       //If another bit then out is 0
+    
+    endcase
+  
+  end
+
+endmodule
+
+
+        //Regfile.sv
+
+//Register file
+
+//Parameteric Enumerations
+//parameter location_sizes=32;
+//parameter location=32;
+
+`include "include.sv"
+module regfile(
+  input                                        clk,
+  input                                        clr,
+  input                                   RegWrite,
+  input              [$clog2(`location)-1:0]readreg1,
+  input              [$clog2(`location)-1:0]readreg2,
+  input              [$clog2(`location)-1:0]WriteReg,
+  input                  [`location_sizes-1:0]DataIn,
+  output reg              [`location_sizes-1:0]Read1,
+  output reg              [`location_sizes-1:0]Read2);
+  
+  //4Byte-32bits addressable memory Registerfle:
+  
+  reg [`location_sizes-1:0] reg_mem[`location];
+  
+  //Memory Block: Read and Write Operations:
+  
+  always @(negedge clk)
+    begin
+      if(clr)begin
+        Read1<=0;
+        Read2<=0;    //If clr signal is 1 then Clear the memory
+        
+        for(int i=0; i<`location; i++)
+          reg_mem[i]<=0;
+        
+      end
+
+      else begin
+        
+        //If RegWrite is 1 then Write on memory
+        
+        if(RegWrite)begin
+          reg_mem[WriteReg]<=DataIn;            //Write Operation
+        end
+      end
+        
+    end
+  
+  always @(*)begin
+    //Read Operation
+    
+    Read1<= reg_mem[readreg1];
+    Read2<= reg_mem[readreg2];
+    
+  end
+endmodule
+
+
+       //Design.sv
+
+
+//Main Module:
+
+`include "Regfile.sv";
+`include "Alu.sv"
+
+//Parameteric Enumeration of Regfile.sv in design.sv
+
+
+                      //Inputs of Regfile
+module ProcessingUnit(
+  input                                          clk,
+  input                                          clr,
+  input                                     RegWrite,
+  input               [$clog2(`location)-1:0]readreg1,
+  input               [$clog2(`location)-1:0]readreg2,
+  input               [$clog2(`location)-1:0]WriteReg,
+  input                     [`location_sizes-1:0]DataIn,
+                      
+  //Input of AlU
+  input                                   [`op_bits-1:0]alu_op,
+                              
+  //Output of AlU
+  output reg                               [`out_bits-1:0] out,
+  //Output of Regfile
+  output                       [`location_sizes-1:0]SR1,
+  output                       [`location_sizes-1:0]SR2);
+  
+  //Regfile Instantiation
+  
+  regfile regInst(.clk(clk),
+                  .clr(clr), 
+                  .RegWrite(RegWrite), 
+                  .readreg1(readreg1), 
+                  .readreg2(readreg2), 
+                  .WriteReg(WriteReg), 
+                  .DataIn(DataIn), 
+                  .Read1(SR1), 
+                  .Read2(SR2));
+  
+  //AlU Instantiation
+  
+  alu aluInst(.inp1(SR1), 
+              .inp2(SR2), 
+              .alu_op(alu_op), 
+              .out(out));
+
+endmodule
+
+
+
+
+           //Testbench.sv
+
+// Testbench for Processing Unit
+
+// Including Regfile.sv and Alu.sv:
+
+module processing_unit_tb();
+ 
+
+
+  //Signals Declaration:
+  reg                        [`op_bits-1:0 ]alu_op;
+  reg                                         clk;
+  reg                                         clr;
+  reg             [$clog2(`location)-1:0] readreg1;
+  reg             [$clog2(`location)-1:0] readreg2;
+  reg             [$clog2(`location)-1:0] WriteReg;
+  reg                                    RegWrite;
+  reg                  [`location_sizes-1:0]DataIn;
+  wire                   [`location_sizes-1:0] SR1;
+  wire                   [`location_sizes-1:0] SR2;
+  wire                           [`out_bits-1:0] out;
+  
+  //Instantiation of module: design.sv:
+  
+  ProcessingUnit dut(.alu_op(alu_op),
+                   .clk(clk),
+                   .clr(clr),
+                   .readreg1(readreg1),
+                   .readreg2(readreg2),
+                   .WriteReg(WriteReg),
+                   .RegWrite(RegWrite),
+                   .DataIn(DataIn),
+                   .SR1(SR1),
+                     .SR2(SR2),
+                     .out(out));
+  // clock generation
+  always #5 clk = ~clk ;
+  
+  //Declaration of Values to input signals
+  initial begin
+    DataIn=0;             
+    clk = 0;
+    clr <= 1;  // reset all memory to zero
+    #10  
+    clr <= 0;  // reset =0 to change data_in
+    
+    
+    for (int i=0; i<`location; i++) @ (posedge clk) begin
+      
+      WriteReg = $random;
+      readreg1 = $random;
+      readreg2 = $random;
+      RegWrite  = 1;
+      DataIn = $random;
+      alu_op  = $random;
+    end
+    end
+  
+  initial begin
+    $dumpfile("dump.vcd");
+    $dumpvars;
+    #250
+    $finish;
+  end
+  
+endmodule
