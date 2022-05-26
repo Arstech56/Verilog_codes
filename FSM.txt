@@ -1,0 +1,128 @@
+// FInite State Machine Of COUNTING UP-DOWN using OVERFLOW conditon
+//ARSLAN SHAFIQUE
+
+module FSM(input enable,
+           input reset,
+           input op,
+           input clk,
+           output [3:0] count,
+           output reg overflow
+          );
+  
+  //Parametric Enumeration
+  localparam IDLE=4'b0000,
+             CNTUP=4'b0001,
+             CNTDWN=4'b0010,
+             OVRFLW=4'b0011;
+  
+  //Sates controllers
+  bit [3:0] current_state, next_state;       
+  
+  bit [3:0] temp;
+  
+  //State Memory Block
+  always @(posedge clk) begin   
+    if(~reset || ~enable)                       //Active Low Reset
+      current_state<=IDLE;
+    else
+      current_state<=next_state;
+  end
+ 
+  
+  //Input Transition Block
+  
+  //Procedural Assignment
+  always @ (op, current_state, posedge clk)begin
+    if(enable)
+      case(current_state)
+        IDLE: begin
+          if(op)
+           next_state<=CNTUP;
+          else if(~op)
+          next_state<=CNTDWN;
+          else
+          next_state<=IDLE;
+        end
+      
+      //CNTUP State:
+      
+     CNTUP: begin
+       if(op)
+         temp<=temp+1;   //UP_counting
+       else if(~op)
+         next_state<=CNTDWN;
+       else
+         next_state<=IDLE;
+       
+       if(temp==4'b1111)    //Counting reaches to 15 then go to OVERFLOW
+         next_state<=OVRFLW;
+       else
+         overflow<=0;
+     end
+       
+      
+      //CNTDWN State:
+      
+        CNTDWN: begin
+          if (~op)
+            temp<=temp-1;
+          else if(op)
+            next_state<=CNTUP;
+          else
+            next_state<=IDLE;
+          
+          if(temp== 4'b0000)      //Counting reaches to 0 then go to OVRFLW  
+            next_state<=OVRFLW;
+          else
+            overflow<=0;
+        end
+        
+      OVRFLW: begin
+        temp<=0;
+        forever #5 overflow<=1;
+          end
+          
+      default: next_state<= IDLE; 
+    endcase
+        else
+          next_state<=IDLE;
+  end
+  
+  
+  
+  //OUTPUT LOGIC
+  assign count=temp;
+endmodule
+
+// Code your testbench here
+// or browse Examples
+
+module counter_tb();
+  bit enable,reset,op;
+  bit clk;
+  wire [3:0] count;
+  bit overflow;
+  
+ FSM dut (enable,reset,op,clk,overflow, count);
+  
+  always #10 clk =~clk;                 //Generating CLOCK pulses
+  initial 
+    begin
+      enable <=0;
+      reset <=0;
+      #20    
+      enable <=1;
+      reset<=1; 
+      for(int i=0; i<40;i++) @ (negedge clk)
+        begin
+          op=$random;
+        end                     
+    end
+  initial
+    begin
+     $dumpfile("dump.vcd"); $dumpvars;
+      #1100
+      $finish();
+  
+    end
+endmodule
